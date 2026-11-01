@@ -1,10 +1,10 @@
 name: "release-tauri-app"
 on:
   push:
-    tags:
-      - "v[0-9]+.[0-9]+.[0-9]+"
-      # A throwaway build that proves the pipeline. Never something a user installs.
-      - "v[0-9]+.[0-9]+.[0-9]+-dev.*"
+    # tags:
+    #   - "v[0-9]+.[0-9]+.[0-9]+"
+    #   # A throwaway build that proves the pipeline. Never something a user installs.
+    #   - "v[0-9]+.[0-9]+.[0-9]+-dev.*"
 
 # One run per tag at a time: two would replace each other's builds on the one release.
 concurrency:
@@ -16,235 +16,235 @@ env:
   RUST_TOOLCHAIN: 1.99.0
 
 jobs:
-  build-happ:
-    name: "Stage 1: build happ"
-    needs: release-environment
-    permissions:
-      contents: read
-    runs-on: ubuntu-22.04
-    outputs:
-      appVersion: ${{ steps.version.outputs.APP_VERSION }}
-      productName: ${{ steps.product.outputs.name }}
-      msiVersion: ${{ steps.msi.outputs.MSI_VERSION }}
-      updaterPubkey: ${{ steps.updater.outputs.pubkey }}
-      startedAt: ${{ steps.start.outputs.at }}
-      happSha256: ${{ steps.happ.outputs.sha256 }}
-      stage1Sums: ${{ steps.gather.outputs.sums }}
-      kind: ${{ steps.kind.outputs.kind }}
-    steps:
-      - name: Note when this run started
-        id: start
-        run: echo "at=$(date +%s)" >> "$GITHUB_OUTPUT"
+  # build-happ:
+  #   name: "Stage 1: build happ"
+  #   # needs: release-environment
+  #   permissions:
+  #     contents: read
+  #   runs-on: ubuntu-22.04
+  #   outputs:
+  #     appVersion: ${{ steps.version.outputs.APP_VERSION }}
+  #     productName: ${{ steps.product.outputs.name }}
+  #     msiVersion: ${{ steps.msi.outputs.MSI_VERSION }}
+  #     updaterPubkey: ${{ steps.updater.outputs.pubkey }}
+  #     startedAt: ${{ steps.start.outputs.at }}
+  #     happSha256: ${{ steps.happ.outputs.sha256 }}
+  #     stage1Sums: ${{ steps.gather.outputs.sums }}
+  #     kind: ${{ steps.kind.outputs.kind }}
+  #   steps:
+  #     - name: Note when this run started
+  #       id: start
+  #       run: echo "at=$(date +%s)" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
+  #     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+  #       with:
+  #         persist-credentials: false
 
-      - name: No code that builds the app can reach a credential that can change a release
-        run: bash scripts/check-build-credentials.sh .github/workflows/*.y*ml
+  #     # - name: No code that builds the app can reach a credential that can change a release
+  #     #   run: bash scripts/check-build-credentials.sh .github/workflows/*.y*ml
 
-      - uses: ./.github/actions/checkout-app
-        with:
-          deploy-key: ${{ secrets.UNYT_DEPLOY_KEY }}
+  #     - uses: ./.github/actions/checkout-app
+  #       with:
+  #         deploy-key: ${{ secrets.UNYT_DEPLOY_KEY }}
 
-      - name: The pinned app, at the tag's version, as identity.json names it and built for network.json
-        env:
-          TAG: ${{ github.ref_name }}
-        run: |
-          bash scripts/set-app-version.sh "$TAG"
-          bash scripts/release-app.sh identity unyt tauri.merged.json
-          bash scripts/release-app.sh build-env "$TAG" >>"$GITHUB_ENV"
-          bash scripts/release-app.sh reads unyt
+  #     - name: The pinned app, at the tag's version, as identity.json names it and built for network.json
+  #       env:
+  #         TAG: ${{ github.ref_name }}
+  #       run: |
+  #         bash scripts/set-app-version.sh "$TAG"
+  #         bash scripts/release-app.sh identity unyt tauri.merged.json
+  #         bash scripts/release-app.sh build-env "$TAG" >>"$GITHUB_ENV"
+  #         bash scripts/release-app.sh reads unyt
 
-      - name: The release and the app's CI pin the same Rust
-        run: bash scripts/check-rust-toolchain.sh unyt/.github/workflows/rust.yaml "$RUST_TOOLCHAIN"
+  #     - name: The release and the app's CI pin the same Rust
+  #       run: bash scripts/check-rust-toolchain.sh unyt/.github/workflows/rust.yaml "$RUST_TOOLCHAIN"
 
-      - name: Install nix
-        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
-        with:
-          nix_path: nixpkgs=channel:nixos-26.05
+  #     - name: Install nix
+  #       uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
+  #       with:
+  #         nix_path: nixpkgs=channel:nixos-26.05
 
-      - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
-        with:
-          name: holochain-ci
-          extraPullNames: darksoil-studio
+  #     - uses: cachix/cachix-action@38b082610b782e7e93e209c35fd730d399dee866 # v17
+  #       with:
+  #         name: holochain-ci
+  #         extraPullNames: darksoil-studio
 
-      - name: The app carries the tag's version in Cargo.toml, Cargo.lock and tauri.conf.json
-        id: version
-        env:
-          TAG: ${{ github.ref_name }}
-        run: |
-          APP_VERSION="$(bash scripts/check-version-contract.sh "$TAG")"
-          echo "APP_VERSION=$APP_VERSION" >> "$GITHUB_OUTPUT"
+  #     - name: The app carries the tag's version in Cargo.toml, Cargo.lock and tauri.conf.json
+  #       id: version
+  #       env:
+  #         TAG: ${{ github.ref_name }}
+  #       run: |
+  #         APP_VERSION="$(bash scripts/check-version-contract.sh "$TAG")"
+  #         echo "APP_VERSION=$APP_VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Read the product name
-        id: product
-        run: |
-          name="$(jq -er .productName tauri.merged.json)"
-          echo "name=$name" >> "$GITHUB_OUTPUT"
+  #     - name: Read the product name
+  #       id: product
+  #       run: |
+  #         name="$(jq -er .productName tauri.merged.json)"
+  #         echo "name=$name" >> "$GITHUB_OUTPUT"
 
-      - name: The key the release signs its updates for
-        id: updater
-        run: bash scripts/updater-signing.sh tauri.merged.json >> "$GITHUB_OUTPUT"
+  #     - name: The key the release signs its updates for
+  #       id: updater
+  #       run: bash scripts/updater-signing.sh tauri.merged.json >> "$GITHUB_OUTPUT"
 
-      - name: The release names each updater asset as the app expects
-        env:
-          PRODUCT: ${{ steps.product.outputs.name }}
-        run: bash scripts/updater-asset-names.sh unyt/src-tauri/src/updater.rs "$PRODUCT"
+  #     - name: The release names each updater asset as the app expects
+  #       env:
+  #         PRODUCT: ${{ steps.product.outputs.name }}
+  #       run: bash scripts/updater-asset-names.sh unyt/src-tauri/src/updater.rs "$PRODUCT"
 
-      - name: Resolve release kind (tag patch → migration | UI)
-        id: kind
-        env:
-          TAG: ${{ github.ref_name }}
-        run: bash scripts/release-kind.sh "$TAG" >> "$GITHUB_OUTPUT"
+  #     - name: Resolve release kind (tag patch → migration | UI)
+  #       id: kind
+  #       env:
+  #         TAG: ${{ github.ref_name }}
+  #       run: bash scripts/release-kind.sh "$TAG" >> "$GITHUB_OUTPUT"
 
-      # Here, not in the Windows job: a tag the msi cannot carry then fails in seconds rather
-      # than after yarn install, the happ download and three other platforms building.
-      - name: Derive and self-test the MSI product version
-        id: msi
-        env:
-          APP_VERSION: ${{ steps.version.outputs.APP_VERSION }}
-        run: |
-          bash scripts/msi-version.sh --self-test
-          msi="$(bash scripts/msi-version.sh "$APP_VERSION")"
-          echo "msi product version: ${msi:-none — a stable build, tauri derives its own}"
-          echo "MSI_VERSION=$msi" >> "$GITHUB_OUTPUT"
+  #     # Here, not in the Windows job: a tag the msi cannot carry then fails in seconds rather
+  #     # than after yarn install, the happ download and three other platforms building.
+  #     - name: Derive and self-test the MSI product version
+  #       id: msi
+  #       env:
+  #         APP_VERSION: ${{ steps.version.outputs.APP_VERSION }}
+  #       run: |
+  #         bash scripts/msi-version.sh --self-test
+  #         msi="$(bash scripts/msi-version.sh "$APP_VERSION")"
+  #         echo "msi product version: ${msi:-none — a stable build, tauri derives its own}"
+  #         echo "MSI_VERSION=$msi" >> "$GITHUB_OUTPUT"
 
-      - name: Build DNA + happ (migration release, vM.m.0)
-        if: steps.kind.outputs.kind == 'migration'
-        run: |
-          cd unyt && nix develop --no-update-lock-file --accept-flake-config --command bash -c "make package"
+  #     - name: Build DNA + happ (migration release, vM.m.0)
+  #       if: steps.kind.outputs.kind == 'migration'
+  #       run: |
+  #         cd unyt && nix develop --no-update-lock-file --accept-flake-config --command bash -c "make package"
 
-      - name: The DNA has the hashes the pinned app commits
-        if: steps.kind.outputs.kind == 'migration'
-        run: bash scripts/check-dna-pin.sh unyt
+  #     - name: The DNA has the hashes the pinned app commits
+  #       if: steps.kind.outputs.kind == 'migration'
+  #       run: bash scripts/check-dna-pin.sh unyt
 
-      - name: Install Rust ${{ env.RUST_TOOLCHAIN }}
-        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # v1
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
+  #     - name: Install Rust ${{ env.RUST_TOOLCHAIN }}
+  #       uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # v1
+  #       with:
+  #         toolchain: ${{ env.RUST_TOOLCHAIN }}
 
-      - name: Build unyt_cli
-        if: steps.kind.outputs.kind == 'migration'
-        run: |
-          cd unyt/
-          cargo build -p unyt_cli --release --locked
+  #     - name: Build unyt_cli
+  #       if: steps.kind.outputs.kind == 'migration'
+  #       run: |
+  #         cd unyt/
+  #         cargo build -p unyt_cli --release --locked
 
-      - name: Inherit lineage happ + repack UI (UI release, vM.m.p)
-        if: steps.kind.outputs.kind == 'ui'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
-          PARENT_TAG: ${{ steps.kind.outputs.parent_tag }}
-        run: bash scripts/inherit-ui-release.sh "$TAG" "$PARENT_TAG"
+  #     - name: Inherit lineage happ + repack UI (UI release, vM.m.p)
+  #       if: steps.kind.outputs.kind == 'ui'
+  #       env:
+  #         GH_TOKEN: ${{ github.token }}
+  #         TAG: ${{ github.ref_name }}
+  #         PARENT_TAG: ${{ steps.kind.outputs.parent_tag }}
+  #       run: bash scripts/inherit-ui-release.sh "$TAG" "$PARENT_TAG"
 
-      - name: Get Changelog Content
-        # Through env, not interpolated into the script: a tag is attacker-shaped input
-        # and `${{ }}` would splice it into the shell before bash ever sees a quote.
-        env:
-          APP_VERSION: ${{ steps.version.outputs.APP_VERSION }}
-        run: |
-          awk -v ver="$APP_VERSION" '
-            $0 ~ "^## \\[" ver "\\]" {p=1; next}
-            p && /^## \[/ {exit}
-            p {print}
-          ' unyt/CHANGELOG.md > release_notes.txt
-          [ -s release_notes.txt ] ||
-            echo "::warning::unyt/CHANGELOG.md has no section [$APP_VERSION], so the release notes name only the network"
+  #     - name: Get Changelog Content
+  #       # Through env, not interpolated into the script: a tag is attacker-shaped input
+  #       # and `${{ }}` would splice it into the shell before bash ever sees a quote.
+  #       env:
+  #         APP_VERSION: ${{ steps.version.outputs.APP_VERSION }}
+  #       run: |
+  #         awk -v ver="$APP_VERSION" '
+  #           $0 ~ "^## \\[" ver "\\]" {p=1; next}
+  #           p && /^## \[/ {exit}
+  #           p {print}
+  #         ' unyt/CHANGELOG.md > release_notes.txt
+  #         [ -s release_notes.txt ] ||
+  #           echo "::warning::unyt/CHANGELOG.md has no section [$APP_VERSION], so the release notes name only the network"
 
-      - name: Note the network in the release notes
-        env:
-          TAG: ${{ github.ref_name }}
-        run: |
-          bash scripts/release-app.sh notes "$TAG" >> release_notes.txt
-          cat release_notes.txt
+  #     - name: Note the network in the release notes
+  #       env:
+  #         TAG: ${{ github.ref_name }}
+  #       run: |
+  #         bash scripts/release-app.sh notes "$TAG" >> release_notes.txt
+  #         cat release_notes.txt
 
-      # Each build row takes the happ from a run artifact, which any job of this run can replace.
-      - name: Note the happ the builds compile in
-        id: happ
-        run: |
-          sum="$(sha256sum <unyt/workdir/unyt.happ)"
-          echo "sha256=${sum%% *}" >> "$GITHUB_OUTPUT"
+  #     # Each build row takes the happ from a run artifact, which any job of this run can replace.
+  #     - name: Note the happ the builds compile in
+  #       id: happ
+  #       run: |
+  #         sum="$(sha256sum <unyt/workdir/unyt.happ)"
+  #         echo "sha256=${sum%% *}" >> "$GITHUB_OUTPUT"
 
-      - name: Gather what the release carries from this stage
-        id: gather
-        run: |
-          mkdir happ
-          cp unyt/workdir/unyt.happ unyt/workdir/unyt.webhapp unyt/dnas/alliance/workdir/alliance.dna \
-            unyt/target/release/unyt_cli happ/
-          {
-            echo 'sums<<EOF'
-            (cd happ && sha256sum -- *)
-            echo EOF
-          } >>"$GITHUB_OUTPUT"
-          cp release_notes.txt happ/
+  #     - name: Gather what the release carries from this stage
+  #       id: gather
+  #       run: |
+  #         mkdir happ
+  #         cp unyt/workdir/unyt.happ unyt/workdir/unyt.webhapp unyt/dnas/alliance/workdir/alliance.dna \
+  #           unyt/target/release/unyt_cli happ/
+  #         {
+  #           echo 'sums<<EOF'
+  #           (cd happ && sha256sum -- *)
+  #           echo EOF
+  #         } >>"$GITHUB_OUTPUT"
+  #         cp release_notes.txt happ/
 
-      # Public, as every artifact of a public repository is, so kept a day rather than ninety.
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: happ
-          path: happ
-          if-no-files-found: error
-          retention-days: 1
+  #     # Public, as every artifact of a public repository is, so kept a day rather than ninety.
+  #     - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+  #       with:
+  #         name: happ
+  #         path: happ
+  #         if-no-files-found: error
+  #         retention-days: 1
 
-  release-environment:
-    name: "Stage 1: release environment"
-    permissions:
-      contents: read
-      actions: read
-    runs-on: ubuntu-22.04
-    outputs:
-      signingKey: ${{ steps.signing-key.outputs.key }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
+  # release-environment:
+  #   name: "Stage 1: release environment"
+  #   permissions:
+  #     contents: read
+  #     actions: read
+  #   runs-on: ubuntu-22.04
+    # outputs:
+    #   signingKey: ${{ steps.signing-key.outputs.key }}
+    # steps:
+    #   - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+    #     with:
+    #       persist-credentials: false
 
-      - name: The release environment admits release tags alone, and holds the signing for a reviewer
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
-        run: bash scripts/check-release-environment.sh release "$TAG"
+      # - name: The release environment admits release tags alone, and holds the signing for a reviewer
+      #   env:
+      #     GH_TOKEN: ${{ github.token }}
+      #     TAG: ${{ github.ref_name }}
+      #   run: bash scripts/check-release-environment.sh release "$TAG"
 
-      - name: A release tag signs with the release key, and any other with a throwaway one
-        id: signing-key
-        env:
-          TAG: ${{ github.ref_name }}
-        run: bash scripts/signing-key.sh "$TAG" >>"$GITHUB_OUTPUT"
+      # - name: A release tag signs with the release key, and any other with a throwaway one
+      #   id: signing-key
+      #   env:
+      #     TAG: ${{ github.ref_name }}
+      #   run: bash scripts/signing-key.sh "$TAG" >>"$GITHUB_OUTPUT"
 
-  publish-happ:
-    name: "Stage 1: publish happ"
-    needs: build-happ
-    permissions:
-      contents: write
-    runs-on: ubuntu-22.04
-    outputs:
-      releaseId: ${{ steps.create-release.outputs.id }}
-    steps:
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: happ
-          path: happ
+  # publish-happ:
+  #   name: "Stage 1: publish happ"
+  #   needs: build-happ
+  #   permissions:
+  #     contents: write
+  #   runs-on: ubuntu-22.04
+  #   outputs:
+  #     releaseId: ${{ steps.create-release.outputs.id }}
+  #   steps:
+  #     - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+  #       with:
+  #         name: happ
+  #         path: happ
 
-      - id: create-release
-        uses: ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd # v1.21.0
-        with:
-          allowUpdates: true
-          artifactErrorsFailBuild: true
-          artifacts: |
-            happ/unyt.happ
-            happ/unyt.webhapp
-            happ/alliance.dna
-            happ/unyt_cli
-          bodyFile: happ/release_notes.txt
-          name: ${{ needs.build-happ.outputs.productName }} ${{ github.ref_name }}
-          tag: ${{ github.ref_name }}
-          prerelease: true
-          draft: true
+  #     - id: create-release
+  #       uses: ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd # v1.21.0
+  #       with:
+  #         allowUpdates: true
+  #         artifactErrorsFailBuild: true
+  #         artifacts: |
+  #           happ/unyt.happ
+  #           happ/unyt.webhapp
+  #           happ/alliance.dna
+  #           happ/unyt_cli
+  #         bodyFile: happ/release_notes.txt
+  #         name: ${{ needs.build-happ.outputs.productName }} ${{ github.ref_name }}
+  #         tag: ${{ github.ref_name }}
+  #         prerelease: true
+  #         draft: true
 
   release-tauri-app:
     name: "Stage 2: build tauri apps (${{ matrix.config.label }})"
-    needs: [build-happ, publish-happ]
+    # needs: [build-happ, publish-happ]
     strategy:
       fail-fast: false
       matrix:
@@ -254,18 +254,18 @@ jobs:
           # macos-15-intel, so the artifact is BUILT on a newer macOS than it is
           # installed on. Pinning these two legs changes what users install, so
           # test-oracle.sh fails on a pin here.
-          - platform: macos-latest
-            args: "--target aarch64-apple-darwin"
-            arc_factor: default
-            label: macos-arm64
-          - platform: macos-latest
-            args: "--target x86_64-apple-darwin"
-            arc_factor: default
-            label: macos-x64
-          - platform: ubuntu-22.04
-            args: "--bundles deb,appimage"
-            arc_factor: default
-            label: linux
+          # - platform: macos-latest
+          #   args: "--target aarch64-apple-darwin"
+          #   arc_factor: default
+          #   label: macos-arm64
+          # - platform: macos-latest
+          #   args: "--target x86_64-apple-darwin"
+          #   arc_factor: default
+          #   label: macos-x64
+          # - platform: ubuntu-22.04
+          #   args: "--bundles deb,appimage"
+          #   arc_factor: default
+          #   label: linux
           - platform: windows-latest
             args: ""
             arc_factor: default
@@ -273,24 +273,24 @@ jobs:
           # THE SAME FOUR PLATFORMS AT ARC 0: a node that gossips and validates
           # but stores no shard of the DHT. Stage 3 smokes the default-arc set
           # only, so these ship unsmoked. release-inventory.sh carries why.
-          - platform: macos-latest
-            args: "--target aarch64-apple-darwin"
-            arc_factor: zero
-            label: macos-arm64 zero-arc
-          - platform: macos-latest
-            args: "--target x86_64-apple-darwin"
-            arc_factor: zero
-            label: macos-x64 zero-arc
-          - platform: ubuntu-22.04
-            args: "--bundles deb,appimage"
-            arc_factor: zero
-            label: linux zero-arc
-          - platform: windows-latest
-            args: ""
-            arc_factor: zero
-            label: windows zero-arc
+          # - platform: macos-latest
+          #   args: "--target aarch64-apple-darwin"
+          #   arc_factor: zero
+          #   label: macos-arm64 zero-arc
+          # - platform: macos-latest
+          #   args: "--target x86_64-apple-darwin"
+          #   arc_factor: zero
+          #   label: macos-x64 zero-arc
+          # - platform: ubuntu-22.04
+          #   args: "--bundles deb,appimage"
+          #   arc_factor: zero
+          #   label: linux zero-arc
+          # - platform: windows-latest
+          #   args: ""
+          #   arc_factor: zero
+          #   label: windows zero-arc
     env:
-      MACOSX_DEPLOYMENT_TARGET: 10.13
+      # MACOSX_DEPLOYMENT_TARGET: 10.13
       HOLOCHAIN_ARC_FACTOR: ${{ matrix.config.arc_factor != 'default' &&
         matrix.config.arc_factor || '' }}
       CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
@@ -309,9 +309,9 @@ jobs:
           persist-credentials: false
           fetch-depth: 1
 
-      - uses: ./.github/actions/checkout-app
-        with:
-          deploy-key: ${{ secrets.UNYT_DEPLOY_KEY }}
+      # - uses: ./.github/actions/checkout-app
+      #   with:
+      #     deploy-key: ${{ secrets.UNYT_DEPLOY_KEY }}
 
       - name: setup node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -323,9 +323,9 @@ jobs:
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
 
-      - name: install x86_64 target
-        if: matrix.config.args == '--target x86_64-apple-darwin'
-        run: rustup target add x86_64-apple-darwin
+      # - name: install x86_64 target
+      #   if: matrix.config.args == '--target x86_64-apple-darwin'
+      #   run: rustup target add x86_64-apple-darwin
 
       - name: install dependencies (ubuntu only)
         if: matrix.config.platform == 'ubuntu-22.04'
@@ -378,28 +378,31 @@ jobs:
         run: |
           yarn install --frozen-lockfile --ignore-engines
 
-      - name: Download the happ stage 1 built
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: happ
-          path: ${{ runner.temp }}/happ
+      - name: Add fake happ
+        run: touch ${{ runner.temp }}/happ
 
-      - name: Check the happ is the one stage 1 built
-        shell: bash
-        env:
-          HAPP_SHA256: ${{ needs.build-happ.outputs.happSha256 }}
-        run: |
-          cp "$RUNNER_TEMP/happ/unyt.happ" unyt/workdir/
-          bash scripts/check-sha256.sh unyt/workdir/unyt.happ "$HAPP_SHA256"
+      # - name: Download the happ stage 1 built
+        # uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        # with:
+        #   name: happ
+        #   path: ${{ runner.temp }}/happ
+
+      # - name: Check the happ is the one stage 1 built
+      #   shell: bash
+      #   env:
+      #     HAPP_SHA256: ${{ needs.build-happ.outputs.happSha256 }}
+      #   run: |
+      #     cp "$RUNNER_TEMP/happ/unyt.happ" unyt/workdir/
+      #     bash scripts/check-sha256.sh unyt/workdir/unyt.happ "$HAPP_SHA256"
 
       - name: Pin the MSI product version
         # Written here, never committed: a wix.version in tauri.conf.json would
         # outlive the release that set it. Empty means a stable build, which
         # tauri versions itself.
-        if: runner.os == 'Windows' && needs.build-happ.outputs.msiVersion != ''
+        if: runner.os == 'Windows' # && needs.build-happ.outputs.msiVersion != ''
         shell: bash
         env:
-          MSI_VERSION: ${{ needs.build-happ.outputs.msiVersion }}
+          MSI_VERSION: ${{ true }} # ${{ needs.build-happ.outputs.msiVersion }}
         run: |
           conf=unyt/src-tauri/tauri.conf.json
           jq --arg v "$MSI_VERSION" '.bundle.windows.wix.version = $v' "$conf" >"$conf.tmp"
@@ -464,12 +467,12 @@ jobs:
         id: build
         uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0.6.2
         env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_DEV_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID_EMAIL }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          # APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          # APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_DEV_IDENTITY }}
+          # APPLE_ID: ${{ secrets.APPLE_ID_EMAIL }}
+          # APPLE_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          # APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           # The service principal that may ask Azure Artifact Signing to sign. It holds no key.
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
@@ -512,211 +515,211 @@ jobs:
         if: always() && matrix.config.platform == 'ubuntu-22.04'
         run: df -h /
 
-  publish-builds:
-    name: "Stage 2: publish the builds"
-    needs: [build-happ, publish-happ, release-tauri-app]
-    # Past a failed build too, so every other platform still ships.
-    if: ${{ !cancelled() && needs.publish-happ.result == 'success' }}
-    permissions:
-      contents: write
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          persist-credentials: false
+  # publish-builds:
+    # name: "Stage 2: publish the builds"
+    # needs: [build-happ, publish-happ, release-tauri-app]
+    # # Past a failed build too, so every other platform still ships.
+    # if: ${{ !cancelled() && needs.publish-happ.result == 'success' }}
+    # permissions:
+    #   contents: write
+    # runs-on: ubuntu-22.04
+    # steps:
+    #   - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+    #     with:
+    #       persist-credentials: false
 
-      - name: Download every build
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          pattern: release-assets-*
-          path: rows
+    #   - name: Download every build
+    #     uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+    #     with:
+    #       pattern: release-assets-*
+    #       path: rows
 
-      - name: Publish them on the release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
-          APP_VERSION: ${{ needs.build-happ.outputs.appVersion }}
-          PRODUCT: ${{ needs.build-happ.outputs.productName }}
-        run: |
-          mkdir assets
-          bash scripts/gather-release-assets.sh "$APP_VERSION" "$PRODUCT" rows assets
-          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber assets/*
+    #   - name: Publish them on the release
+    #     env:
+    #       GH_TOKEN: ${{ github.token }}
+    #       TAG: ${{ github.ref_name }}
+    #       APP_VERSION: ${{ needs.build-happ.outputs.appVersion }}
+    #       PRODUCT: ${{ needs.build-happ.outputs.productName }}
+    #     run: |
+    #       mkdir assets
+    #       bash scripts/gather-release-assets.sh "$APP_VERSION" "$PRODUCT" rows assets
+    #       gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber assets/*
 
-  updater-manifests:
-    name: "Stage 2: updater manifests"
-    needs: [release-environment, build-happ, publish-builds]
-    # Past a failed build too, so the platform it left unsigned is named rather than skipped.
-    if: ${{ !cancelled() && needs.publish-builds.result == 'success' }}
-    # The one job that holds the release key: its secrets live in this environment alone.
-    environment: ${{ needs.release-environment.outputs.signingKey == 'release' && 'release' || '' }}
-    permissions:
-      contents: write
-    outputs:
-      throwawayPubkey: ${{ steps.throwaway.outputs.pubkey }}
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          persist-credentials: false
+  # updater-manifests:
+  #   name: "Stage 2: updater manifests"
+  #   needs: [release-environment, build-happ, publish-builds]
+  #   # Past a failed build too, so the platform it left unsigned is named rather than skipped.
+  #   if: ${{ !cancelled() && needs.publish-builds.result == 'success' }}
+  #   # The one job that holds the release key: its secrets live in this environment alone.
+  #   environment: ${{ needs.release-environment.outputs.signingKey == 'release' && 'release' || '' }}
+  #   permissions:
+  #     contents: write
+  #   outputs:
+  #     throwawayPubkey: ${{ steps.throwaway.outputs.pubkey }}
+  #   runs-on: ubuntu-22.04
+  #   steps:
+  #     - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+  #       with:
+  #         persist-credentials: false
 
-      - name: Install minisign
-        run: bash scripts/install-minisign.sh
+  #     - name: Install minisign
+  #       run: bash scripts/install-minisign.sh
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version: 22.23.3
+  #     - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+  #       with:
+  #         node-version: 22.23.3
 
-      - name: Install the signer
-        run: npm ci --prefix scripts/tauri-signer --ignore-scripts --no-audit --no-fund
+  #     - name: Install the signer
+  #       run: npm ci --prefix scripts/tauri-signer --ignore-scripts --no-audit --no-fund
 
-      - name: A throwaway key to sign with, which dies with this job
-        id: throwaway
-        if: needs.release-environment.outputs.signingKey == 'throwaway'
-        run: bash scripts/throwaway-key.sh >>"$GITHUB_OUTPUT"
+  #     - name: A throwaway key to sign with, which dies with this job
+  #       id: throwaway
+  #       if: needs.release-environment.outputs.signingKey == 'throwaway'
+  #       run: bash scripts/throwaway-key.sh >>"$GITHUB_OUTPUT"
 
-      - name: Download the updater artifacts, their build signatures, and the rest SHA256SUMS covers
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
-        run: |
-          mkdir assets
-          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern '*.sig' --dir assets
-          for sig in assets/*.sig; do
-            gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir assets \
-              --pattern "$(basename "$sig" .sig)"
-          done
-          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir assets --pattern '*.dmg' \
-            --pattern unyt.happ --pattern unyt.webhapp --pattern alliance.dna --pattern unyt_cli
+  #     - name: Download the updater artifacts, their build signatures, and the rest SHA256SUMS covers
+  #       env:
+  #         GH_TOKEN: ${{ github.token }}
+  #         TAG: ${{ github.ref_name }}
+  #       run: |
+  #         mkdir assets
+  #         gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern '*.sig' --dir assets
+  #         for sig in assets/*.sig; do
+  #           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir assets \
+  #             --pattern "$(basename "$sig" .sig)"
+  #         done
+  #         gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir assets --pattern '*.dmg' \
+  #           --pattern unyt.happ --pattern unyt.webhapp --pattern alliance.dna --pattern unyt_cli
 
-      - name: Download each build's record
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          pattern: updater-provenance-*
-          path: provenance
+  #     - name: Download each build's record
+  #       uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+  #       with:
+  #         pattern: updater-provenance-*
+  #         path: provenance
 
-      # SHA256SUMS names the bytes each build recorded making, and only where the release carries them.
-      - name: Sign them under their asset names, and SHA256SUMS
-        env:
-          APP_VERSION: ${{ needs.build-happ.outputs.appVersion }}
-          STARTED_AT: ${{ needs.build-happ.outputs.startedAt }}
-          PRODUCT: ${{ needs.build-happ.outputs.productName }}
-          PUBKEY: ${{ needs.release-environment.outputs.signingKey == 'release' &&
-            needs.build-happ.outputs.updaterPubkey || steps.throwaway.outputs.pubkey }}
-          STAGE1_SUMS: ${{ needs.build-happ.outputs.stage1Sums }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ needs.release-environment.outputs.signingKey == 'release' &&
-            secrets.TAURI_SIGNING_PRIVATE_KEY || steps.throwaway.outputs.key }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ needs.release-environment.outputs.signingKey == 'release' &&
-            secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || steps.throwaway.outputs.password }}
-        run: |
-          find provenance -type f -name '*.sha256' -exec cat {} + >updater-provenance.sha256
-          bash scripts/updater-sign.sh "$APP_VERSION" assets "$STARTED_AT" updater-provenance.sha256
-          mkdir sums
-          bash scripts/release-sums.sh "$APP_VERSION" "$PRODUCT" "$PUBKEY" updater-provenance.sha256 \
-            "$STAGE1_SUMS" assets sums
+  #     # SHA256SUMS names the bytes each build recorded making, and only where the release carries them.
+  #     - name: Sign them under their asset names, and SHA256SUMS
+  #       env:
+  #         APP_VERSION: ${{ needs.build-happ.outputs.appVersion }}
+  #         STARTED_AT: ${{ needs.build-happ.outputs.startedAt }}
+  #         PRODUCT: ${{ needs.build-happ.outputs.productName }}
+  #         PUBKEY: ${{ needs.release-environment.outputs.signingKey == 'release' &&
+  #           needs.build-happ.outputs.updaterPubkey || steps.throwaway.outputs.pubkey }}
+  #         STAGE1_SUMS: ${{ needs.build-happ.outputs.stage1Sums }}
+  #         TAURI_SIGNING_PRIVATE_KEY: ${{ needs.release-environment.outputs.signingKey == 'release' &&
+  #           secrets.TAURI_SIGNING_PRIVATE_KEY || steps.throwaway.outputs.key }}
+  #         TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ needs.release-environment.outputs.signingKey == 'release' &&
+  #           secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || steps.throwaway.outputs.password }}
+  #       run: |
+  #         find provenance -type f -name '*.sha256' -exec cat {} + >updater-provenance.sha256
+  #         bash scripts/updater-sign.sh "$APP_VERSION" assets "$STARTED_AT" updater-provenance.sha256
+  #         mkdir sums
+  #         bash scripts/release-sums.sh "$APP_VERSION" "$PRODUCT" "$PUBKEY" updater-provenance.sha256 \
+  #           "$STAGE1_SUMS" assets sums
 
-      - name: Publish them with one manifest per arc factor, and SHA256SUMS
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
-          APP_VERSION: ${{ needs.build-happ.outputs.appVersion }}
-          PUBKEY: ${{ needs.release-environment.outputs.signingKey == 'release' &&
-            needs.build-happ.outputs.updaterPubkey || steps.throwaway.outputs.pubkey }}
-        run: |
-          mkdir manifests
-          bash scripts/updater-manifests.sh "$TAG" "$APP_VERSION" "$PUBKEY" assets manifests
-          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber assets/*.sig manifests/* sums/*
+  #     - name: Publish them with one manifest per arc factor, and SHA256SUMS
+  #       env:
+  #         GH_TOKEN: ${{ github.token }}
+  #         TAG: ${{ github.ref_name }}
+  #         APP_VERSION: ${{ needs.build-happ.outputs.appVersion }}
+  #         PUBKEY: ${{ needs.release-environment.outputs.signingKey == 'release' &&
+  #           needs.build-happ.outputs.updaterPubkey || steps.throwaway.outputs.pubkey }}
+  #       run: |
+  #         mkdir manifests
+  #         bash scripts/updater-manifests.sh "$TAG" "$APP_VERSION" "$PUBKEY" assets manifests
+  #         gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber assets/*.sig manifests/* sums/*
 
   # A draft is readable only with a token that can write, and every smoke job runs what it downloads.
   # So this job takes the installers back from the draft for the smoke, and runs none of them.
-  draft-installers:
-    name: "Stage 3: take the installers back from the draft"
-    # After the signing, and never after it failed: the smoke runs the release's installers, which could
-    # replace the build records the signing trusts. A release whose signing failed has its draft and
-    # tag deleted and the tag pushed again, not re-run.
-    needs: [release-environment, build-happ, publish-happ, publish-builds, updater-manifests]
-    # Not gated on the build rows: one failed row would suppress every lane. A failed row fails the
-    # signing, and so skips the smoke.
-    # !cancelled(), not always(): a cancelled run shouldn't start a 30-min sweep.
-    if: ${{ !cancelled() && needs.publish-happ.outputs.releaseId != '' && needs.updater-manifests.result == 'success' }}
-    permissions:
-      contents: write
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          persist-credentials: false
+  # draft-installers:
+  #   name: "Stage 3: take the installers back from the draft"
+  #   # After the signing, and never after it failed: the smoke runs the release's installers, which could
+  #   # replace the build records the signing trusts. A release whose signing failed has its draft and
+  #   # tag deleted and the tag pushed again, not re-run.
+  #   needs: [release-environment, build-happ, publish-happ, publish-builds, updater-manifests]
+  #   # Not gated on the build rows: one failed row would suppress every lane. A failed row fails the
+  #   # signing, and so skips the smoke.
+  #   # !cancelled(), not always(): a cancelled run shouldn't start a 30-min sweep.
+  #   if: ${{ !cancelled() && needs.publish-happ.outputs.releaseId != '' && needs.updater-manifests.result == 'success' }}
+  #   permissions:
+  #     contents: write
+  #   runs-on: ubuntu-22.04
+  #   steps:
+  #     - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+  #       with:
+  #         persist-credentials: false
 
-      - name: Install minisign
-        run: bash scripts/install-minisign.sh
+  #     - name: Install minisign
+  #       run: bash scripts/install-minisign.sh
 
-      - name: Download the draft's installers, and SHA256SUMS with its signature
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
-        run: |
-          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir installers --pattern '*.deb' \
-            --pattern '*.AppImage' --pattern '*.exe' --pattern '*.msi' --pattern '*.dmg'
-          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir sums --pattern SHA256SUMS \
-            --pattern SHA256SUMS.minisig
+  #     - name: Download the draft's installers, and SHA256SUMS with its signature
+  #       env:
+  #         GH_TOKEN: ${{ github.token }}
+  #         TAG: ${{ github.ref_name }}
+  #       run: |
+  #         gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir installers --pattern '*.deb' \
+  #           --pattern '*.AppImage' --pattern '*.exe' --pattern '*.msi' --pattern '*.dmg'
+  #         gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir sums --pattern SHA256SUMS \
+  #           --pattern SHA256SUMS.minisig
 
-      # The smoke checks each installer it takes against this SHA256SUMS.
-      - name: Hand over only the installers SHA256SUMS names, signed by the key this run signed with
-        env:
-          APP_VERSION: ${{ needs.build-happ.outputs.appVersion }}
-          PUBKEY: ${{ needs.release-environment.outputs.signingKey == 'release' &&
-            needs.build-happ.outputs.updaterPubkey || needs.updater-manifests.outputs.throwawayPubkey }}
-        run: |
-          bash scripts/check-release-sums.sh "$APP_VERSION" "$PUBKEY" sums installers
-          cp sums/SHA256SUMS installers/
+  #     # The smoke checks each installer it takes against this SHA256SUMS.
+  #     - name: Hand over only the installers SHA256SUMS names, signed by the key this run signed with
+  #       env:
+  #         APP_VERSION: ${{ needs.build-happ.outputs.appVersion }}
+  #         PUBKEY: ${{ needs.release-environment.outputs.signingKey == 'release' &&
+  #           needs.build-happ.outputs.updaterPubkey || needs.updater-manifests.outputs.throwawayPubkey }}
+  #       run: |
+  #         bash scripts/check-release-sums.sh "$APP_VERSION" "$PUBKEY" sums installers
+  #         cp sums/SHA256SUMS installers/
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: draft-installers
-          path: installers
-          if-no-files-found: error
-          retention-days: 1
+  #     - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+  #       with:
+  #         name: draft-installers
+  #         path: installers
+  #         if-no-files-found: error
+  #         retention-days: 1
 
-  # Not `workflow_run`: that only fires on the default branch.
-  smoke-test:
-    # JUST THE STAGE: GitHub prefixes every called job with this one, so anything
-    # said here is said again on all 16 lines of the Checks list.
-    name: Stage 3
-    needs: [draft-installers]
-    if: ${{ !cancelled() && needs.draft-installers.result == 'success' }}
-    uses: ./.github/workflows/release-smoke.yaml
-    permissions:
-      contents: read
-    with:
-      release: ${{ github.ref_name }}
-      installers: draft-installers
-      # Only here, and only over phase 2: a hand-dispatched release-smoke must
-      # answer red for everything, and no switch may soften phase 1.
-      static-checks-advisory: true
+  # # Not `workflow_run`: that only fires on the default branch.
+  # smoke-test:
+  #   # JUST THE STAGE: GitHub prefixes every called job with this one, so anything
+  #   # said here is said again on all 16 lines of the Checks list.
+  #   name: Stage 3
+  #   needs: [draft-installers]
+  #   if: ${{ !cancelled() && needs.draft-installers.result == 'success' }}
+  #   uses: ./.github/workflows/release-smoke.yaml
+  #   permissions:
+  #     contents: read
+  #   with:
+  #     release: ${{ github.ref_name }}
+  #     installers: draft-installers
+  #     # Only here, and only over phase 2: a hand-dispatched release-smoke must
+  #     # answer red for everything, and no switch may soften phase 1.
+  #     static-checks-advisory: true
 
-  # A person makes it the latest release by hand.
-  publish-release:
-    name: "Stage 4: publish the release as a pre-release"
-    needs: [publish-happ, release-tauri-app, publish-builds, updater-manifests, draft-installers, smoke-test]
-    permissions:
-      contents: write
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Publish the draft as a pre-release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_ID: ${{ needs.publish-happ.outputs.releaseId }}
-        run: |
-          gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
-            -F draft=false -F prerelease=true -f make_latest=false >/dev/null
+  # # A person makes it the latest release by hand.
+  # publish-release:
+  #   name: "Stage 4: publish the release as a pre-release"
+  #   needs: [publish-happ, release-tauri-app, publish-builds, updater-manifests, draft-installers, smoke-test]
+  #   permissions:
+  #     contents: write
+  #   runs-on: ubuntu-22.04
+  #   steps:
+  #     - name: Publish the draft as a pre-release
+  #       env:
+  #         GH_TOKEN: ${{ github.token }}
+  #         RELEASE_ID: ${{ needs.publish-happ.outputs.releaseId }}
+  #       run: |
+  #         gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
+  #           -F draft=false -F prerelease=true -f make_latest=false >/dev/null
 
   # Called, not tagged: a tag this run's token pushes would start no workflow.
-  cli-release:
-    name: "Stage 5: the CLI release"
-    needs: [build-happ, publish-release]
-    if: needs.build-happ.outputs.kind == 'migration'
-    uses: ./.github/workflows/release-cli.yaml
-    permissions:
-      contents: write
-    with:
-      tag: cli-${{ github.ref_name }}.0
-    secrets: inherit
+  # cli-release:
+  #   name: "Stage 5: the CLI release"
+  #   needs: [build-happ, publish-release]
+  #   if: needs.build-happ.outputs.kind == 'migration'
+  #   uses: ./.github/workflows/release-cli.yaml
+  #   permissions:
+  #     contents: write
+  #   with:
+  #     tag: cli-${{ github.ref_name }}.0
+  #   secrets: inherit
